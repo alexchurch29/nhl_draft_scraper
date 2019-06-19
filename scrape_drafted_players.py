@@ -14,11 +14,11 @@ def get_url(url):
     """
 
     response = requests.Session()
-    retries = Retry(total=10, backoff_factor=.1)
+    retries = Retry(total=30, backoff_factor=.1)
     response.mount('http://', HTTPAdapter(max_retries=retries))
 
     try:
-        response = response.get(url, timeout=10)
+        response = response.get(url, timeout=60)
         response.raise_for_status()
     except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError):
         return None
