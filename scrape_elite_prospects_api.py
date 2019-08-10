@@ -19,12 +19,10 @@ def main():
     draft = parse_draft_json(1995, 2019)
     draft.to_sql('draft', conn, if_exists='replace', index=False)
 
-    player_queue = draft['Player_Id'].unique().tolist() #some players get drafted more than once so we need unique
+    player_queue = draft['Player_Id'].unique().tolist()  # some players get drafted more than once so we need unique
     player_set = set()
     player_league_queue = list()
-    goalie_league_queue = list()
     player_league_set = set()
-    goalie_league_set = set()
 
     player_bios = list()
     player_stats = list()
@@ -34,19 +32,32 @@ def main():
         player_id = player_queue.pop()
         if player_id not in player_set:
             player = parse_player_json(player_id)
-            if int(player[0][0][3][:4]) > 1976:
-                player_bios.append(player[0][0])
-                if player[0][0][5] != 'G':
-                    for i in range(0, len(player[1])):
-                        player_stats.append(player[1][i])
-                else:
-                    for i in range(0, len(player[1])):
-                        goalie_stats.append(player[1][i])
-            player_set.add(player_id)
+            try:
+                if int(player[0][0][3][:4]) > 1969:
+                    player_bios.append(player[0][0])
+                    if player[0][0][5] != 'G':
+                        for i in range(0, len(player[1])):
+                            player_stats.append(player[1][i])
+                            if (player[1][i][4], player[1][i][1]) not in player_league_set and \
+                                            (player[1][i][4], player[1][i][1]) not in player_league_queue:
+                                player_league_queue.append((player[1][i][4], player[1][i][1]))
+                                while len(player_league_queue) > 0:
+                                    league_season = player_league_queue.pop()
+                                    new_players = parse_league_players(league_season[0], league_season[1])
+                                    for j in range(0, len(new_players)):
+                                        if new_players[j] not in player_queue and new_players[j] not in player_set:
+                                            player_queue.append(new_players[j])
+                                    player_league_set.add(league_season)
+                    else:
+                        for i in range(0, len(player[1])):
+                            goalie_stats.append(player[1][i])
+                player_set.add(player_id)
+            except:
+                player_set.add(player_id)
 
     player_bios = pd.DataFrame(player_bios, columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots', 'Height', 'Weight'])
-    player_stats = pd.DataFrame(player_stats, columns=['Player_Id', 'Season', 'Team', 'League', 'GP', 'G', 'A', 'P', 'PIM', '+/-'])
-    goalie_stats = pd.DataFrame(goalie_stats, columns=['Player_Id', 'Season', 'Team', 'League', 'GP', 'GAA', 'SVP'])
+    player_stats = pd.DataFrame(player_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'G', 'A', 'P', 'PIM', '+/-'])
+    goalie_stats = pd.DataFrame(goalie_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'GAA', 'SVP'])
 
     player_bios.to_sql('bios', conn, if_exists='replace', index=False)
     player_stats.to_sql('player_stats', conn, if_exists='replace', index=False)
@@ -161,6 +172,33 @@ def get_player_stats(player_id):
     return player_json
 
 
+def get_league_players(league_id, season, offset):
+    """
+    Given a league id and season it returns the eliteprospects json data containing all player ids for that season
+    Ex: http://api.eliteprospects.com/beta/leagues/91/playerstats?season=2017-2018&limit=1000&offset=0&fields=player.id&apikey=abcdefghijk123456
+    :param league_id: league id
+    :param season: season
+    :param offset: offset
+    :return: eliteprospects json data containing player ids for the given season
+    """
+
+    league_id = str(league_id)
+    season = str(season)
+    offset = str(offset)
+    url = 'http://api.eliteprospects.com/beta/leagues/{}/playerstats?season={}&limit=1000&offset={}&fields=player.id&apikey={}'.format(
+        league_id, season, offset, api_key)
+
+    try:
+        response = get_url(url)
+        time.sleep(1)
+        season_json = json.loads(response.text)
+    except requests.exceptions.HTTPError as e:
+        print('Json for league {} and season {} not returned.'.format(league_id, season), e)
+        return None
+
+    return season_json
+
+
 def parse_draft_json(start_year, end_year):
     """
     Parses the eliteprospects json for a given range of draft years
@@ -232,7 +270,10 @@ def parse_player_json(player_id):
     try:
         player.append(player_json['data'][0]['player']['dateOfBirth'])
     except:
-        player.append(None)
+        try:
+            player.append(str(player_json['data'][0]['player']['yearOfBirth']))
+        except:
+            player.append(None)
     try:
         player.append(player_json['data'][0]['player']['country']['name'])
     except:
@@ -264,6 +305,7 @@ def parse_player_json(player_id):
                     season.append(player_json['data'][i]['season']['name'])
                     season.append(player_json['data'][i]['team']['name'])
                     season.append(player_json['data'][i]['league']['name'])
+                    season.append(player_json['data'][i]['league']['id'])
                     season.append(player_json['data'][i]['GP'])
                     season.append(player_json['data'][i]['G'])
                     season.append(player_json['data'][i]['A'])
@@ -282,6 +324,7 @@ def parse_player_json(player_id):
                     season.append(player_json['data'][i]['season']['name'])
                     season.append(player_json['data'][i]['team']['name'])
                     season.append(player_json['data'][i]['league']['name'])
+                    season.append(player_json['data'][i]['league']['id'])
                     season.append(player_json['data'][i]['GP'])
                     season.append(player_json['data'][i]['GAA'])
                     season.append(player_json['data'][i]['SVP'])
@@ -290,6 +333,31 @@ def parse_player_json(player_id):
                     pass
 
     return bios, stats
+
+
+def parse_league_players(league_id, season):
+    """
+    Parses the eliteprospects json for a given league and season
+    :param league_id: league id
+    :param season: season
+    :return: list of player ids who played during the given season in the given league
+    """
+
+    players = list()
+
+    offset = 0
+    season_json = get_league_players(league_id, season, offset)
+    total_count = season_json['metadata']['totalCount']
+
+    while True:
+        for i in range(0, len(season_json['data'])):
+            players.append(season_json['data'][i]['player']['id'])
+        offset += 1000
+        if offset > total_count:
+            break
+        season_json = get_league_players(league_id, season, offset)
+
+    return players
 
 
 if __name__ == '__main__':
