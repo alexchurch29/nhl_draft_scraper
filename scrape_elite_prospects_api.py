@@ -98,7 +98,7 @@ def main():
     drop_player_temp = cur.executescript('''
             DROP TABLE IF EXISTS player_stats;''')
     drop_goalie_temp = cur.executescript('''
-                DROP TABLE IF EXISTS goalie_stats;''')
+            DROP TABLE IF EXISTS goalie_stats;''')
 
     return
 
@@ -297,40 +297,43 @@ def parse_player_json(player_id):
     bios.append(player)
 
     for i in range(0, len(player_json['data'])):
-        if player_json['data'][i]["gameType"] == "REGULAR_SEASON":
-            season = list()
-            if player_json['data'][0]['player']['playerPositionDetailed'] != 'G':
-                try:
-                    season.append(player_json['data'][i]['player']['id'])
-                    season.append(player_json['data'][i]['season']['name'])
-                    season.append(player_json['data'][i]['team']['name'])
-                    season.append(player_json['data'][i]['league']['name'])
-                    season.append(player_json['data'][i]['league']['id'])
-                    season.append(player_json['data'][i]['GP'])
-                    season.append(player_json['data'][i]['G'])
-                    season.append(player_json['data'][i]['A'])
-                    season.append(player_json['data'][i]['TP'])
-                    season.append(player_json['data'][i]['PIM'])
+        try:
+            if player_json['data'][i]["gameType"] == "REGULAR_SEASON":
+                season = list()
+                if player_json['data'][0]['player']['playerPositionDetailed'] != 'G':
                     try:
-                        season.append(player_json['data'][i]['PM'])
+                        season.append(player_json['data'][i]['player']['id'])
+                        season.append(player_json['data'][i]['season']['name'])
+                        season.append(player_json['data'][i]['team']['name'])
+                        season.append(player_json['data'][i]['league']['name'])
+                        season.append(player_json['data'][i]['league']['id'])
+                        season.append(player_json['data'][i]['GP'])
+                        season.append(player_json['data'][i]['G'])
+                        season.append(player_json['data'][i]['A'])
+                        season.append(player_json['data'][i]['TP'])
+                        season.append(player_json['data'][i]['PIM'])
+                        try:
+                            season.append(player_json['data'][i]['PM'])
+                        except:
+                            season.append(None)
+                        stats.append(season)
                     except:
-                        season.append(None)
-                    stats.append(season)
-                except:
-                    pass
-            else:
-                try:
-                    season.append(player_json['data'][i]['player']['id'])
-                    season.append(player_json['data'][i]['season']['name'])
-                    season.append(player_json['data'][i]['team']['name'])
-                    season.append(player_json['data'][i]['league']['name'])
-                    season.append(player_json['data'][i]['league']['id'])
-                    season.append(player_json['data'][i]['GP'])
-                    season.append(player_json['data'][i]['GAA'])
-                    season.append(player_json['data'][i]['SVP'])
-                    stats.append(season)
-                except:
-                    pass
+                        pass
+                else:
+                    try:
+                        season.append(player_json['data'][i]['player']['id'])
+                        season.append(player_json['data'][i]['season']['name'])
+                        season.append(player_json['data'][i]['team']['name'])
+                        season.append(player_json['data'][i]['league']['name'])
+                        season.append(player_json['data'][i]['league']['id'])
+                        season.append(player_json['data'][i]['GP'])
+                        season.append(player_json['data'][i]['GAA'])
+                        season.append(player_json['data'][i]['SVP'])
+                        stats.append(season)
+                    except:
+                        pass
+        except:
+            pass
 
     return bios, stats
 
