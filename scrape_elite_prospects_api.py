@@ -31,8 +31,8 @@ def main():
     while len(player_queue) > 0:
         player_id = player_queue.pop()
         if player_id not in player_set:
-            player = parse_player_json(player_id)
             try:
+                player = parse_player_json(player_id)
                 if int(player[0][0][3][:4]) > 1969:
                     player_bios.append(player[0][0])
                     if player[0][0][5] != 'G':
@@ -53,6 +53,7 @@ def main():
                             goalie_stats.append(player[1][i])
                 player_set.add(player_id)
             except:
+                print("Error for player {}".format(player_id))
                 player_set.add(player_id)
 
     player_bios = pd.DataFrame(player_bios, columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots', 'Height', 'Weight'])
@@ -142,8 +143,8 @@ def get_draft_json(draft_year, offset):
         response = get_url(url)
         time.sleep(1)
         draft_json = json.loads(response.text)
-    except requests.exceptions.HTTPError as e:
-        print('Json for draft {} not returned.'.format(draft_year), e)
+    except:
+        print('Json for draft {} not returned.'.format(draft_year))
         return None
 
     return draft_json
@@ -165,8 +166,8 @@ def get_player_stats(player_id):
         response = get_url(url)
         time.sleep(1)
         player_json = json.loads(response.text)
-    except requests.exceptions.HTTPError as e:
-        print('Json for player {} not returned.'.format(player_id), e)
+    except:
+        print('Json for player {} not returned.'.format(player_id))
         return None
 
     return player_json
@@ -192,8 +193,8 @@ def get_league_players(league_id, season, offset):
         response = get_url(url)
         time.sleep(1)
         season_json = json.loads(response.text)
-    except requests.exceptions.HTTPError as e:
-        print('Json for league {} and season {} not returned.'.format(league_id, season), e)
+    except:
+        print('Json for league {} and season {} not returned.'.format(league_id, season))
         return None
 
     return season_json
