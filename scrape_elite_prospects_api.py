@@ -1,3 +1,8 @@
+"""
+Used to query the eliteprospects API in order to build a database of player bios, draft info, and career stats
+that will all be used as inputs for our ML prediction model
+"""
+
 import time
 import requests
 import json
@@ -6,7 +11,7 @@ import pandas as pd
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# import eliteprospects api key from local file
+# import eliteprospects api key
 f = open('api_key.txt', 'r')
 api_key = f.read()
 
@@ -33,7 +38,7 @@ def main():
         if player_id not in player_set:
             try:
                 player = parse_player_json(player_id)
-                if int(player[0][0][3][:4]) > 1969:
+                if int(player[0][0][3][:4]) > 1969: # set lower limit on birth year
                     player_bios.append(player[0][0])
                     if player[0][0][5] != 'G':
                         for i in range(0, len(player[1])):
@@ -56,7 +61,7 @@ def main():
                 print("Error for player {}".format(player_id))
                 player_set.add(player_id)
 
-    player_bios = pd.DataFrame(player_bios, columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots', 'Height', 'Weight'])
+    player_bios = pd.DataFrame(player_bios, columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots', 'Height', 'Weight', 'Pos2'])
     player_stats = pd.DataFrame(player_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'G', 'A', 'P', 'PIM', '+/-'])
     goalie_stats = pd.DataFrame(goalie_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'GAA', 'SVP'])
 
@@ -73,7 +78,8 @@ def main():
 
     skater_season_stats = cur.executescript('''
             create table skater_stats_season as
-            select t1.*, substr(t1.season,0,5) - substr(t2.dob,length(dob)+1,-4) as age, 
+            select t1.*, case when length(t2.dob)>4 then round((julianday((substr(t1.season,-4) || "-09-15")) - 
+            julianday(dob))/365.25,2) else null end as age, substr(t1.season,-4) - substr(dob,0, 5) as age2, 
             round(round(g,2)/gp,2) as G_GP, round(round(a,2)/gp,2) as A_GP, round(round(P,2)/gp,2) as P_GP
             from player_stats t1
             inner join bios t2 
@@ -83,18 +89,19 @@ def main():
                 create table skater_stats_career as
                 select t1.*, round(round(t1.g,2)/t1.gp,2) as G_GP, round(round(t1.a,2)/t1.gp,2) as A_GP, 
                 round(round(t1.P,2)/t1.gp,2) as P_GP
-                from (select bios.Player_Id, league, sum(gp) as GP, sum(g) as G, sum(a) as A, sum(p) as P
+                from (select bios.Player_Id, league_name, league_id, sum(gp) as GP, sum(g) as G, sum(a) as A, sum(p) as P
                 from player_stats
                 inner join bios 
                 on player_stats.Player_Id = bios.Player_Id
-                group by player_stats.Player_Id, league) t1''')
+                group by player_stats.Player_Id, league_id) t1''')
 
     goalie_season_stats = cur.executescript('''
                 create table goalie_stats_season as
-                select t1.*, substr(t1.season,0,5) - substr(t2.dob,length(dob)+1,-4) as age
+                select t1.*, round((julianday((substr(t1.season,-4) || "-09-15")) - julianday(dob))/365.25,2) as age
                 from goalie_stats t1
                 inner join bios t2 
-                on t1.Player_Id = t2.Player_Id''')
+                on t1.Player_Id = t2.Player_Id
+                where length(t2.dob)>4''')
 
     drop_player_temp = cur.executescript('''
             DROP TABLE IF EXISTS player_stats;''')
@@ -293,6 +300,15 @@ def parse_player_json(player_id):
         player.append(None)
     try:
         player.append(player_json['data'][0]['player']['weight'])
+    except:
+        player.append(None)
+    try:
+        if player_json['data'][0]['player']['playerPositionDetailed'].find('G') != -1:
+            player.append('G')
+        elif player_json['data'][0]['player']['playerPositionDetailed'].find('D') != -1:
+            player.append('D')
+        else:
+            player.append('F')
     except:
         player.append(None)
     bios.append(player)
