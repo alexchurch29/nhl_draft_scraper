@@ -40,22 +40,26 @@ def main():
     league_equivalencies = list()
     for i in range(0, len(league_list)):
         wLE = list()
-        for path in nx.all_simple_paths(G, source=league_list[i], target='NHL', cutoff=6):
+        for path in nx.all_simple_paths(G, source=league_list[i], target='NHL', cutoff=3):
             prod = 1
             for j in range(0, len(path)-1):
                 prod *= G.edge[path[j]][path[j+1]]['LE']
-            wLE.append(prod)
+            wLE.append((prod, len(path)))
 
         LE = 0
         for k in range(0, len(wLE)):
-            LE += wLE[k]/len(wLE)
+            LE += wLE[k][0]/wLE[k][1]**2
+        if len(wLE) > 0:
+            LE = LE / len(wLE)
         league_equivalencies.append([league_list[i], LE])
 
     league_equivalencies = pd.DataFrame(league_equivalencies, columns=['league_name', 'LE'])
-    # league_equivalencies.to_sql('league_equivalencies', conn, if_exists='replace', index=False)
-    league_equivalencies.to_csv("league_equivalenciestest.csv", index=False)
-
+    NHL = league_equivalencies.loc[league_equivalencies["league_name"] == "NHL"]["LE"].values[0]
+    league_equivalencies["LE"] = league_equivalencies["LE"].apply(lambda x: x / NHL)
     equivalencies = league_equivalencies['LE'].tolist()
+    league_equivalencies = league_equivalencies.sort_values(by=["LE"], ascending=False)
+    league_equivalencies.to_sql('league_equivalencies', conn, if_exists='replace', index=False)
+
     league_list = ['NHL', 'AHL', 'KHL', 'SHL', 'Liiga', 'NLA', 'DEL', 'Allsvenskan', 'SuperElit', 'Jr. A SM-liiga', 'MHL', 'NCAA', 'USHL', 'OHL', 'WHL', 'QMJHL']
     labels = dict()
     for i in range(0, len(league_list)):
@@ -64,7 +68,7 @@ def main():
     plt.figure(3, figsize=(90, 90))
     plt.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.15, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
+    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.15, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 2500 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
     plt.show()
 
 
