@@ -68,7 +68,7 @@ def main():
     # plt.figure(3, figsize=(90, 90))
     plt.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.15, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
+    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.5, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
     plt.savefig('plots/league_equivalencies.jpeg')
 
 
