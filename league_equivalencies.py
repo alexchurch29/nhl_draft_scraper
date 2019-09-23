@@ -21,7 +21,7 @@ def main():
                                 on t1.player_id = t2.player_id
                                 inner join bios t3 
                                 on t1.player_id = t3.player_id
-                                where t1.age2 = (t2.age2 - 1) and cast(substr(t1.season,5,-4) as integer) >= 2008 and t1.gp >= 20 and t2.gp >= 20
+                                where t1.age2 = (t2.age2 - 1) /*and cast(substr(t1.season,5,-4) as integer) >= 2008*/ and t1.gp >= 20 and t2.gp >= 20
                     )
                     group by league_name0, league_name1)
                     where n >= 20''', conn)
@@ -65,11 +65,11 @@ def main():
     for i in range(0, len(league_list)):
         labels[league_list[i]] = league_list[i]
 
-    plt.figure(3, figsize=(90, 90))
+    # plt.figure(3, figsize=(90, 90))
     plt.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
-    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.15, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 2500 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
-    plt.show()
+    nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.15, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
+    plt.savefig('plots/league_equivalencies.jpeg')
 
 
 if __name__ == '__main__':
