@@ -24,7 +24,7 @@ def main():
                                 where t1.age2 = (t2.age2 - 1) /*and cast(substr(t1.season,5,-4) as integer) >= 2008*/ and t1.gp >= 20 and t2.gp >= 20
                     )
                     group by league_name0, league_name1)
-                    where n >= 20''', conn)
+                    where n >= 50''', conn)
 
     league0 = leagues['league_name0'].tolist()
     league1 = leagues['league_name1'].tolist()
@@ -48,7 +48,7 @@ def main():
 
         LE = 0
         for k in range(0, len(wLE)):
-            LE += wLE[k][0]  # /wLE[k][1]**2
+            LE += wLE[k][0]/wLE[k][1]**2
         if len(wLE) > 0:
             LE = LE / len(wLE)
         league_equivalencies.append([league_list[i], LE])
@@ -69,7 +69,6 @@ def main():
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.5, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
     plt.savefig('plots/league_equivalencies.jpeg')
-
 
 if __name__ == '__main__':
     main()
