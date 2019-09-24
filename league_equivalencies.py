@@ -48,7 +48,7 @@ def main():
 
         LE = 0
         for k in range(0, len(wLE)):
-            LE += wLE[k][0]/wLE[k][1]**2
+            LE += wLE[k][0]  # /wLE[k][1]**2
         if len(wLE) > 0:
             LE = LE / len(wLE)
         league_equivalencies.append([league_list[i], LE])
@@ -65,7 +65,6 @@ def main():
     for i in range(0, len(league_list)):
         labels[league_list[i]] = league_list[i]
 
-    # plt.figure(3, figsize=(90, 90))
     plt.axis('off')
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     nx.draw_networkx(G=G, pos=nx.spring_layout(G, k=0.5, iterations=20), node_list=G.nodes(), node_color='orange', node_size=[i * 1000 for i in equivalencies], edge_color='blue', alpha=0.2, arrows=False, font_size=7, labels=labels)
