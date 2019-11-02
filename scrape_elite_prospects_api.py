@@ -66,7 +66,7 @@ def main():
     goalie_stats = pd.DataFrame(goalie_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'GAA', 'SVP'])
 
     player_bios.to_sql('bios', conn, if_exists='replace', index=False)
-    player_stats.to_sql('player_stats', conn, if_exists='replace', index=False)
+    player_stats.to_sql('skater_stats', conn, if_exists='replace', index=False)
     goalie_stats.to_sql('goalie_stats', conn, if_exists='replace', index=False)
 
     drop_player_season = cur.executescript('''
@@ -81,7 +81,7 @@ def main():
             select t1.*, case when length(t2.dob)>4 then round((julianday((substr(t1.season,-4) || "-09-15")) - 
             julianday(dob))/365.25,2) else null end as age, substr(t1.season,-4) - substr(dob,0, 5) as age2, 
             round(round(g,2)/gp,2) as G_GP, round(round(a,2)/gp,2) as A_GP, round(round(P,2)/gp,2) as P_GP
-            from player_stats t1
+            from skater_stats t1
             inner join bios t2 
             on t1.Player_Id = t2.Player_Id''')
 
@@ -90,7 +90,7 @@ def main():
                 select t1.*, round(round(t1.g,2)/t1.gp,2) as G_GP, round(round(t1.a,2)/t1.gp,2) as A_GP, 
                 round(round(t1.P,2)/t1.gp,2) as P_GP
                 from (select bios.Player_Id, league_name, league_id, sum(gp) as GP, sum(g) as G, sum(a) as A, sum(p) as P
-                from player_stats
+                from skater_stats
                 inner join bios 
                 on player_stats.Player_Id = bios.Player_Id
                 group by player_stats.Player_Id, league_id) t1''')
@@ -104,7 +104,7 @@ def main():
                 where length(t2.dob)>4''')
 
     drop_player_temp = cur.executescript('''
-            DROP TABLE IF EXISTS player_stats;''')
+            DROP TABLE IF EXISTS skater_stats;''')
     drop_goalie_temp = cur.executescript('''
             DROP TABLE IF EXISTS goalie_stats;''')
 
