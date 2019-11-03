@@ -1,13 +1,11 @@
 import sqlite3
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 
 
 def main():
 
-    #parse_time_series_data()
-    print(cluster_details(22))
+    return
 
 
 def parse_time_series_data(p="F"):

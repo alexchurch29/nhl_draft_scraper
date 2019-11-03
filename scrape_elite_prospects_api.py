@@ -7,6 +7,7 @@ import time
 import requests
 import json
 import sqlite3
+import sys
 import pandas as pd
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -17,96 +18,10 @@ api_key = f.read()
 
 
 def main():
-
-    conn = sqlite3.connect('nhl_draft.db')
-    cur = conn.cursor()
-
-    draft = parse_draft_json(1995, 2019)
-    draft.to_sql('draft', conn, if_exists='replace', index=False)
-
-    player_queue = draft['Player_Id'].unique().tolist()  # some players get drafted more than once so we need unique
-    player_set = set()
-    player_league_queue = list()
-    player_league_set = set()
-
-    player_bios = list()
-    player_stats = list()
-    goalie_stats = list()
-
-    while len(player_queue) > 0:
-        player_id = player_queue.pop()
-        if player_id not in player_set:
-            try:
-                player = parse_player_json(player_id)
-                if int(player[0][0][3][:4]) > 1969: # set lower limit on birth year
-                    player_bios.append(player[0][0])
-                    if player[0][0][5] != 'G':
-                        for i in range(0, len(player[1])):
-                            player_stats.append(player[1][i])
-                            if (player[1][i][4], player[1][i][1]) not in player_league_set and \
-                                            (player[1][i][4], player[1][i][1]) not in player_league_queue:
-                                player_league_queue.append((player[1][i][4], player[1][i][1]))
-                                while len(player_league_queue) > 0:
-                                    league_season = player_league_queue.pop()
-                                    new_players = parse_league_players(league_season[0], league_season[1])
-                                    for j in range(0, len(new_players)):
-                                        if new_players[j] not in player_queue and new_players[j] not in player_set:
-                                            player_queue.append(new_players[j])
-                                    player_league_set.add(league_season)
-                    else:
-                        for i in range(0, len(player[1])):
-                            goalie_stats.append(player[1][i])
-                player_set.add(player_id)
-            except:
-                print("Error for player {}".format(player_id))
-                player_set.add(player_id)
-
-    player_bios = pd.DataFrame(player_bios, columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots', 'Height', 'Weight', 'Pos2'])
-    player_stats = pd.DataFrame(player_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'G', 'A', 'P', 'PIM', '+/-'])
-    goalie_stats = pd.DataFrame(goalie_stats, columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'GAA', 'SVP'])
-
-    player_bios.to_sql('bios', conn, if_exists='replace', index=False)
-    player_stats.to_sql('skater_stats', conn, if_exists='replace', index=False)
-    goalie_stats.to_sql('goalie_stats', conn, if_exists='replace', index=False)
-
-    drop_player_season = cur.executescript('''
-                DROP TABLE IF EXISTS skater_stats_season;''')
-    drop_player_career = cur.executescript('''
-                    DROP TABLE IF EXISTS skater_stats_career;''')
-    drop_goalie_season = cur.executescript('''
-                        DROP TABLE IF EXISTS goalie_stats_season;''')
-
-    skater_season_stats = cur.executescript('''
-            create table skater_stats_season as
-            select t1.*, case when length(t2.dob)>4 then round((julianday((substr(t1.season,-4) || "-09-15")) - 
-            julianday(dob))/365.25,2) else null end as age, substr(t1.season,-4) - substr(dob,0, 5) as age2, 
-            round(round(g,2)/gp,2) as G_GP, round(round(a,2)/gp,2) as A_GP, round(round(P,2)/gp,2) as P_GP
-            from skater_stats t1
-            inner join bios t2 
-            on t1.Player_Id = t2.Player_Id''')
-
-    skater_career_stats = cur.executescript('''
-                create table skater_stats_career as
-                select t1.*, round(round(t1.g,2)/t1.gp,2) as G_GP, round(round(t1.a,2)/t1.gp,2) as A_GP, 
-                round(round(t1.P,2)/t1.gp,2) as P_GP
-                from (select bios.Player_Id, league_name, league_id, sum(gp) as GP, sum(g) as G, sum(a) as A, sum(p) as P
-                from skater_stats
-                inner join bios 
-                on player_stats.Player_Id = bios.Player_Id
-                group by player_stats.Player_Id, league_id) t1''')
-
-    goalie_season_stats = cur.executescript('''
-                create table goalie_stats_season as
-                select t1.*, round((julianday((substr(t1.season,-4) || "-09-15")) - julianday(dob))/365.25,2) as age
-                from goalie_stats t1
-                inner join bios t2 
-                on t1.Player_Id = t2.Player_Id
-                where length(t2.dob)>4''')
-
-    drop_player_temp = cur.executescript('''
-            DROP TABLE IF EXISTS skater_stats;''')
-    drop_goalie_temp = cur.executescript('''
-            DROP TABLE IF EXISTS goalie_stats;''')
+    """
+    :param: argv[1] is first draft year in range, argv[2] is final draft year in range
+    """
+    call_api()
 
     return
 
@@ -378,6 +293,106 @@ def parse_league_players(league_id, season):
         season_json = get_league_players(league_id, season, offset)
 
     return players
+
+def call_api():
+    """
+    Calls the eliteprospects api and parses all data in order to compile database
+    :return:
+    """
+    conn = sqlite3.connect('nhl_draft.db')
+    cur = conn.cursor()
+
+    draft = parse_draft_json(sys.argv[1], sys.argv[2])
+    draft.to_sql('draft', conn, if_exists='replace', index=False)
+
+    player_queue = draft['Player_Id'].unique().tolist()  # some players get drafted more than once so we need unique
+    player_set = set()
+    player_league_queue = list()
+    player_league_set = set()
+
+    player_bios = list()
+    player_stats = list()
+    goalie_stats = list()
+
+    while len(player_queue) > 0:
+        player_id = player_queue.pop()
+        if player_id not in player_set:
+            try:
+                player = parse_player_json(player_id)
+                if int(player[0][0][3][:4]) > 1969:  # set lower limit on birth year
+                    player_bios.append(player[0][0])
+                    if player[0][0][5] != 'G':
+                        for i in range(0, len(player[1])):
+                            player_stats.append(player[1][i])
+                            if (player[1][i][4], player[1][i][1]) not in player_league_set and \
+                                            (player[1][i][4], player[1][i][1]) not in player_league_queue:
+                                player_league_queue.append((player[1][i][4], player[1][i][1]))
+                                while len(player_league_queue) > 0:
+                                    league_season = player_league_queue.pop()
+                                    new_players = parse_league_players(league_season[0], league_season[1])
+                                    for j in range(0, len(new_players)):
+                                        if new_players[j] not in player_queue and new_players[j] not in player_set:
+                                            player_queue.append(new_players[j])
+                                    player_league_set.add(league_season)
+                    else:
+                        for i in range(0, len(player[1])):
+                            goalie_stats.append(player[1][i])
+                player_set.add(player_id)
+            except:
+                print("Error for player {}".format(player_id))
+                player_set.add(player_id)
+
+    player_bios = pd.DataFrame(player_bios,
+                               columns=['Player_Id', 'First_Name', 'Last_Name', 'DOB', 'Country', 'Pos', 'Shoots',
+                                        'Height', 'Weight', 'Pos2'])
+    player_stats = pd.DataFrame(player_stats,
+                                columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'G', 'A', 'P',
+                                         'PIM', '+/-'])
+    goalie_stats = pd.DataFrame(goalie_stats,
+                                columns=['Player_Id', 'Season', 'Team', 'League_Name', 'League_Id', 'GP', 'GAA', 'SVP'])
+
+    player_bios.to_sql('bios', conn, if_exists='replace', index=False)
+    player_stats.to_sql('skater_stats', conn, if_exists='replace', index=False)
+    goalie_stats.to_sql('goalie_stats', conn, if_exists='replace', index=False)
+
+    drop_player_season = cur.executescript('''
+                    DROP TABLE IF EXISTS skater_stats_season;''')
+    drop_player_career = cur.executescript('''
+                        DROP TABLE IF EXISTS skater_stats_career;''')
+    drop_goalie_season = cur.executescript('''
+                            DROP TABLE IF EXISTS goalie_stats_season;''')
+
+    skater_season_stats = cur.executescript('''
+                create table skater_stats_season as
+                select t1.*, case when length(t2.dob)>4 then round((julianday((substr(t1.season,-4) || "-09-15")) - 
+                julianday(dob))/365.25,2) else null end as age, substr(t1.season,-4) - substr(dob,0, 5) as age2, 
+                round(round(g,2)/gp,2) as G_GP, round(round(a,2)/gp,2) as A_GP, round(round(P,2)/gp,2) as P_GP
+                from skater_stats t1
+                inner join bios t2 
+                on t1.Player_Id = t2.Player_Id''')
+
+    skater_career_stats = cur.executescript('''
+                    create table skater_stats_career as
+                    select t1.*, round(round(t1.g,2)/t1.gp,2) as G_GP, round(round(t1.a,2)/t1.gp,2) as A_GP, 
+                    round(round(t1.P,2)/t1.gp,2) as P_GP
+                    from (select bios.Player_Id, league_name, league_id, sum(gp) as GP, sum(g) as G, sum(a) as A, sum(p) as P
+                    from skater_stats
+                    inner join bios 
+                    on player_stats.Player_Id = bios.Player_Id
+                    group by player_stats.Player_Id, league_id) t1''')
+
+    goalie_season_stats = cur.executescript('''
+                    create table goalie_stats_season as
+                    select t1.*, round((julianday((substr(t1.season,-4) || "-09-15")) - julianday(dob))/365.25,2) as age
+                    from goalie_stats t1
+                    inner join bios t2 
+                    on t1.Player_Id = t2.Player_Id
+                    where length(t2.dob)>4''')
+
+    drop_player_temp = cur.executescript('''
+                DROP TABLE IF EXISTS skater_stats;''')
+    drop_goalie_temp = cur.executescript('''
+                DROP TABLE IF EXISTS goalie_stats;''')
 
 
 if __name__ == '__main__':
