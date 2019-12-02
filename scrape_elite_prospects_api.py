@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import pandas as pd
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
 # import eliteprospects api key
 f = open('api_key.txt', 'r')
@@ -21,10 +21,9 @@ def main():
     """
     :param: argv[1] is first draft year in range, argv[2] is final draft year in range
     """
-    call_api()
+    #call_api()
 
     return
-
 
 def get_url(url):
     """
@@ -383,7 +382,8 @@ def call_api():
 
     goalie_season_stats = cur.executescript('''
                     create table goalie_stats_season as
-                    select t1.*, round((julianday((substr(t1.season,-4) || "-09-15")) - julianday(dob))/365.25,2) as age
+                    select t1.*, round((julianday((substr(t1.season,-4) || "-09-15")) - julianday(dob))/365.25,2) as age,
+                    substr(t1.season,-4) - substr(dob,0, 5) as age2
                     from goalie_stats t1
                     inner join bios t2 
                     on t1.Player_Id = t2.Player_Id
@@ -393,6 +393,94 @@ def call_api():
                 DROP TABLE IF EXISTS skater_stats;''')
     drop_goalie_temp = cur.executescript('''
                 DROP TABLE IF EXISTS goalie_stats;''')
+
+
+def parse_player_accolades():
+    """
+    Parse player accolades from eliteprospects player page in order to build table containing awards and other accolades
+    http://api.eliteprospects.com/beta/players/6146?apikey=abcdefghijk123456
+    :return:
+    """
+    conn = sqlite3.connect('nhl_draft.db')
+
+    nhl = pd.read_sql_query('''select player_id from skater_stats_career where league_name = "NHL"
+                                union all 
+                                select distinct(t1.player_id) from goalie_stats_season t1 
+                                inner join bios t2 
+                                on t1.player_id=t2.player_id
+                                where league_name = "NHL" and pos2 = "G"''', conn)
+    player_ids = nhl['Player_Id'].tolist()
+    df = list()
+
+    for i in range(0, len(player_ids)):
+        player_id = player_ids[i]
+        url = 'http://api.eliteprospects.com/beta/players/{}?apikey={}'.format(player_id, api_key)
+        try:
+            response = get_url(url)
+            time.sleep(1)
+            player_json = json.loads(response.text)
+        except:
+            print('Json for player {} not returned.'.format(player_id))
+            df.append([player_id, 0, 0, 0, 0, 0, 0])
+            continue
+        # id, hart(7464), norris(7467), vezina(7471), first all-star(230), second all-star(149), all-star(223)
+        awards = [player_id, 0, 0, 0, 0, 0, 0]
+        for j in player_json['data']['awards']:
+            try:
+                if j['awardType']['id'] == 7464:
+                    awards[1] += 1
+                if j['awardType']['id'] == 7467:
+                    awards[2] += 1
+                if j['awardType']['id'] == 7471:
+                    awards[3] += 1
+                if j['awardType']['id'] == 230:
+                    awards[4] += 1
+                if j['awardType']['id'] == 149:
+                    awards[5] += 1
+                if j['awardType']['id'] == 223:
+                    awards[6] += 1
+            except:
+                pass
+        df.append(awards)
+
+    player_awards = pd.DataFrame(df,
+                                columns=['Player_Id', 'Hart', 'Norris', 'Vezina', 'First_All_Star', 'Second_All_Star', 'All_Star'])
+
+    player_awards.to_sql('awards', conn, if_exists='replace', index=False)
+
+    add_wjcs = pd.read_sql_query('''select t1.player_id as player_id, WJC_18, WJC_20, 
+                                Hart, Norris, Vezina, First_All_Star, Second_All_Star, All_Star
+                                from (select distinct(player_id) as player_id
+                                from skater_stats_season
+                                union all 
+                                select distinct(player_id) as player_id
+                                from goalie_stats_season) t1 
+                                left join (select player_id, count(player_id) as WJC_18
+                                from skater_stats_season
+                                where league_name = "WJC-18"
+                                group by player_id
+                                union all 
+                                select player_id, count(player_id) as WJC_18
+                                from goalie_stats_season
+                                where league_name = "WJC-18"
+                                group by player_id) t2
+                                on t1.player_id=t2.player_id
+                                left join (select player_id, count(player_id) as WJC_20
+                                from skater_stats_season
+                                where league_name = "WJC-20" and age2 <= 18
+                                group by player_id
+                                union all
+                                select player_id, count(player_id) as WJC_20
+                                from goalie_stats_season
+                                where league_name = "WJC-20" and age2 <= 18
+                                group by player_id) t3
+                                on t1.player_id=t3.player_id
+                                left join awards t4
+                                on t1.player_id = t4.player_id''', conn)
+
+    add_wjcs.to_sql('awards', conn, if_exists='replace', index=False)
+
+    return
 
 
 if __name__ == '__main__':

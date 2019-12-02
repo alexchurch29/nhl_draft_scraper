@@ -81,6 +81,39 @@ def parse_league_equivalencies():
                      font_size=7, labels=labels)
     plt.savefig('plots/league_equivalencies.jpeg')
 
+    return
+
+
+def era_adjustments():
+    conn = sqlite3.connect('nhl_draft.db')
+
+    leagues = pd.read_sql_query('''
+            select * from 
+                (select season, league_name, count(player_id) as n, sum(gp) as gp, round(sum(p), 2)/round(sum(gp), 2) as p_gp
+                from skater_stats_season
+                group by league_name, season)
+                /*where n >= 200*/
+            ''', conn)
+
+    leagues = leagues.groupby(leagues.league_name)[['p_gp']].median()
+    leagues.to_sql('era_adjustments', conn, if_exists='replace', index=True)
+
+    leagues = pd.read_sql_query('''
+                select season, t1.league_name, t2.p_gp/t1.p_gp as era_adj_p_gp from 
+                    (select season, league_name, count(player_id) as n, sum(gp) as gp, round(sum(p), 2)/round(sum(gp), 2) as p_gp
+                    from skater_stats_season
+                    group by league_name, season) t1
+                inner join (select league_name, round(sum(p), 2)/round(sum(gp), 2) as p_gp
+                from skater_stats_season
+                group by league_name
+                 )t2
+                on t1.league_name = t2.league_name
+                ''', conn)
+
+    leagues.to_sql('era_adjustments', conn, if_exists='replace', index=True)
+
+    return
+
 
 if __name__ == '__main__':
     main()
