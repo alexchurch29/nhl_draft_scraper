@@ -13,8 +13,10 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.linear_model import LassoCV, LogisticRegression
-from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
+from sklearn.metrics import f1_score, accuracy_score, recall_score, confusion_matrix
 from sklearn.feature_selection import SelectFromModel
+from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import NearMiss
 
 
 def main():
@@ -83,11 +85,7 @@ def pre_processing(adj=0, predictor=1, test_size=0.3, random_state=0):
                     on t1.player_id=t3.player_id 
                     left join (
                     select player_id, gp, p_gp, 
-                    /*case when gp <= 164 then 0  
-                    when gp > 164 and p_gp >= 0 and p_gp < 0.33 then 2
-                    when gp > 164 and p_gp >= 0.25 and p_gp < 0.66 then 3 
-                    else 4 end as player_classifier*/
-                    case when gp /*< 1*/ <= 164 or p_gp < 0.33 then 0  
+                    case when gp /* < 1 */ <= 164 or p_gp < 0.33 then 0  
                     else 1 end as player_classifier
                     from skater_stats_career
                     where league_name = "NHL") t4
@@ -104,9 +102,9 @@ def pre_processing(adj=0, predictor=1, test_size=0.3, random_state=0):
 
     df = one_hot_encoding(df)
     if adj:
-        X = df.loc[:, [i for i in df.columns if i not in ['first_round', 'all_star', 'player_classifier', 'gp17', 'g_gp17', 'a_gp17', 'gp18', 'g_gp18', 'a_gp18']]]
+        X = df[[i for i in df.columns if i not in ['first_round', 'all_star', 'player_classifier', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']]]
     else:
-        X = df.loc[:, [i for i in df.columns if i not in ['first_round', 'all_star', 'player_classifier', 'adj_gp_a17', 'adj_gp_a18', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18']]]
+        X = df[[i for i in df.columns if i not in ['first_round', 'all_star', 'player_classifier', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18']]]
     if predictor == 1:
         y = df[['player_classifier']]
     elif predictor == 2:
@@ -114,9 +112,9 @@ def pre_processing(adj=0, predictor=1, test_size=0.3, random_state=0):
     elif predictor == 3:
         y = df[['first_round']]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
-    X_train = feature_scaling(X_train)
-    X_test = feature_scaling(X_test)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state,
+                                                        stratify=y)
+    X_train, X_test = feature_scaling(X_train, X_test, adj)
 
     return df, X_train, X_test, y_train, y_test
 
@@ -141,21 +139,29 @@ def one_hot_encoding(df):
     return df
 
 
-def feature_scaling(df):
+def feature_scaling(train, test, adj):
     '''
     :param df: dataframe to tranform
     :return: transformed df
     '''
-    data_to_standardize = df[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18',
-                              'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20',
-                              'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']]
-    scaler = StandardScaler().fit(data_to_standardize)
-    standardized_columns = scaler.transform(data_to_standardize)
-    df[['height', 'weight', 'age', 'adj_g_a17',
-        'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20',
-                            'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']] = standardized_columns
+    if adj:
+        train_data_to_standardize = train[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20']]
+        test_data_to_standardize = test[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20']]
+        scaler = StandardScaler().fit(train_data_to_standardize)
+        train_standardized_columns = scaler.transform(train_data_to_standardize)
+        test_standardized_columns = scaler.transform(test_data_to_standardize)
+        train[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20']] = train_standardized_columns
+        test[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'WJC_18', 'WJC_20']] = test_standardized_columns
+    else:
+        train_data_to_standardize = train[['height', 'weight', 'age', 'WJC_18', 'WJC_20', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']]
+        test_data_to_standardize = test[['height', 'weight', 'age', 'WJC_18', 'WJC_20', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']]
+        scaler = StandardScaler().fit(train_data_to_standardize)
+        train_standardized_columns = scaler.transform(train_data_to_standardize)
+        test_standardized_columns = scaler.transform(test_data_to_standardize)
+        train[['height', 'weight', 'age', 'WJC_18', 'WJC_20', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']] = train_standardized_columns
+        test[['height', 'weight', 'age', 'WJC_18', 'WJC_20', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18']] = test_standardized_columns
 
-    return df
+    return train, test
 
 
 def select_features(X_train, y_train, X_test, algorithm, threshold=0.05):
@@ -194,33 +200,50 @@ def train_models(cv=3):
     :return:
     '''
 
-    df = pre_processing(adj=1, predictor=3)
+    df = pre_processing(adj=1, predictor=1)
     X_train_original = df[1]
     X_test_original = df[2]
     y_train = df[3]
     y_test = df[4]
 
-    X_train = X_train_original.loc[:, [i for i in X_train_original.columns if i not in ['player_id']]]
-    X_test = X_test_original.loc[:, [i for i in X_test_original.columns if i not in ['player_id']]]
+    X_train = X_train_original[[i for i in X_train_original.columns if i not in ['player_id']]]
+    X_test = X_test_original[[i for i in X_test_original.columns if i not in ['player_id']]]
 
-    X_train, X_test = select_features(X_train, y_train, X_test, GradientBoostingClassifier())
+    # X_train, X_test = select_features(X_train, y_train, X_test, LassoCV())
 
-    clf = KNeighborsClassifier()
-    clf.fit(X_train, y_train.values.ravel())
-    y_train_nbc_pred = cross_val_predict(clf, X_train, y_train.values.ravel(), cv=cv)
+    smt = SMOTE()
+    nr = NearMiss()
+    smt_X_train, smt_y_train = smt.fit_sample(X_train, y_train)
+    # nr_X_train, nr_y_train = nr.fit_sample(X_train, y_train)
+
+    clf = GradientBoostingClassifier()
+    clf.fit(smt_X_train, smt_y_train)
+    smt_y_train_nbc_pred = cross_val_predict(clf, smt_X_train, smt_y_train, cv=cv)
     y_pred = clf.predict(X_test)
-    print("f1: {}".format(f1_score(y_train.values.ravel(), y_train_nbc_pred)))
+    print("SMOTE")
+    print("f1: {}".format(f1_score(smt_y_train, smt_y_train_nbc_pred)))
     print(confusion_matrix(y_test, y_pred))
+    print("Recall:", recall_score(y_test, y_pred))
     print("Accuracy:", accuracy_score(y_test, y_pred))
+
+    # clf = GradientBoostingClassifier()
+    # clf.fit(nr_X_train, nr_y_train)
+    # nr_y_train_nbc_pred = cross_val_predict(clf, nr_X_train, nr_y_train, cv=cv)
+    # y_pred = clf.predict(X_test)
+    # print("Near Miss")
+    # print("f1: {}".format(f1_score(nr_y_train, nr_y_train_nbc_pred)))
+    # print(confusion_matrix(y_test, y_pred))
+    # print("Recall:", recall_score(y_test, y_pred))
+    # print("Accuracy:", accuracy_score(y_test, y_pred))
 
     # save_model(clf, 'clf_allstar_player.sav')
 
-    # test = X_test_original.loc[:, [i for i in X_test_original.columns if i in ['player_id']]]
-    # test['player_class'] = y_test
-    # test['prediction'] = y_pred
-    # test['probability'] = [i[1] for i in nbc_clf.predict_proba(X_test)]
-    # test = test.sort_values(by=['prediction', 'probability'], ascending=False)
-    # test.to_sql('test', sqlite3.connect('nhl_draft.db'), if_exists='replace', index=False)
+    test = X_test_original.loc[:, [i for i in X_test_original.columns if i in ['player_id']]]
+    test['player_class'] = y_test
+    test['prediction'] = y_pred
+    test['probability'] = [i[1] for i in clf.predict_proba(X_test)]
+    test = test.sort_values(by=['prediction', 'probability'], ascending=False)
+    test.to_sql('test', sqlite3.connect('nhl_draft.db'), if_exists='replace', index=False)
 
     '''
     vclf = VotingClassifier(
@@ -231,7 +254,7 @@ def train_models(cv=3):
     vclf.fit(X_train, y_train.values.ravel())
     y_train_vclf_pred = cross_val_predict(vclf, X_train, y_train.values.ravel(), cv=cv)
     print("vclf: {}".format(f1_score(y_train.values.ravel(), y_train_vclf_pred, average="macro")))
-    
+
     gbc_clf = GradientBoostingClassifier()
     gbc_clf.fit(X_train, y_train.values.ravel())
     y_train_gbc_pred = cross_val_predict(gbc_clf, X_train, y_train.values.ravel(), cv=cv)
