@@ -1,6 +1,6 @@
 """
-Used to query the eliteprospects API in order to build a database of player bios, draft info, and career stats
-that will all be used as inputs for our ML prediction model
+Used to query the eliteprospects API in order to build a database of player bios, historical draft info,
+and career stats that will all be used as inputs for our ML prediction model
 """
 
 import time
@@ -24,6 +24,7 @@ def main():
     #call_api()
 
     return
+
 
 def get_url(url):
     """
@@ -73,7 +74,7 @@ def get_draft_json(draft_year, offset):
 
 def get_player_stats(player_id):
     """
-    Given a player id it returns the eliteprospects json data for that players career stats
+    Given a player id it returns the eliteprospects json data for that players career stats by season
     Ex: http://api.eliteprospects.com/beta/players/199898/stats?limit=1000&sort=season.name:asc&apikey=abcdefghijk123456
     :param player_id: player id
     :return: eliteprospects json data for that player's career stats
