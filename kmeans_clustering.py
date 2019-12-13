@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 
 
 def main():
-    # parse_clusters()
+    # parse_clusters("D")
     # test(2017)
     return
 
@@ -81,26 +81,26 @@ def parse_clusters(p="F"):
 
     pre_draft.to_sql('{}_clusters200'.format(p), conn, if_exists='replace', index=False)
 
-    cluster_details = cur.executescript('''create table forward_clusters as
-            select t1.player_id as player_id, t1.clusters as clusters50, t2.clusters as cluster100, 
+    cluster_details = cur.executescript('''create table {}_clusters as
+            select t1.player_id as player_id, t1.clusters as clusters50, t2.clusters as clusters100, 
             t3.clusters as clusters200
-            from f_clusters50 t1
-            left join f_clusters100 t2
+            from {}_clusters50 t1
+            left join {}_clusters100 t2
             on t1.player_id=t2.player_id
-            left_join f_clusters200 t3
-            on t1.player_id=t3.player_id''')
+            left join {}_clusters200 t3
+            on t1.player_id=t3.player_id'''.format(p, p, p, p))
 
     drop = cur.executescript('''
-                        DROP TABLE IF EXISTS clusters50;''')
+                        DROP TABLE IF EXISTS {}_clusters50;'''.format(p))
     drop = cur.executescript('''
-                            DROP TABLE IF EXISTS clusters100;''')
+                            DROP TABLE IF EXISTS {}_clusters100;'''.format(p))
     drop = cur.executescript('''
-                            DROP TABLE IF EXISTS clusters200;''')
+                            DROP TABLE IF EXISTS {}_clusters200;'''.format(p))
 
     # drop = cur.executescript('''
-    #                     DROP TABLE IF EXISTS forward_clusters2;''')
+    #                     DROP TABLE IF EXISTS f_clusters2;''')
     #
-    # cluster_details = cur.executescript('''create table forward_clusters2 as
+    # cluster_details = cur.executescript('''create table f_clusters2 as
     #     select clusters, count(player_id) as n, sum(gp)/count(player_id) as gp,
     #     sum(g)/count(player_id) as g, sum(p)/count(player_id) as p/*,
     #     case when sum(g)/sum(gp) isnull then 0 else round(sum(g),2)/round(sum(gp),2) end as g_gp,
@@ -109,7 +109,7 @@ def parse_clusters(p="F"):
     #     case when t2.gp notnull then t2.gp else 0 end as gp,
     #     case when t2.g notnull then t2.g else 0 end as g,
     #     case when t2.p notnull then t2.p else 0 end as p
-    #     from forward_clusters t1
+    #     from f_clusters t1
     #     left join (select * from skater_stats_career where league_name='NHL') t2
     #     on t1.player_id=t2.player_id)
     #     group by clusters''')
@@ -128,7 +128,7 @@ def parse_clusters(p="F"):
 #                     case when t2.gp notnull then t2.gp else 0 end as gp,
 #                     case when t2.g notnull then t2.g else 0 end as g,
 #                     case when t2.p notnull then t2.p else 0 end as p
-#                     from forward_clusters t1
+#                     from f_clusters t1
 #                     left join (select * from skater_stats_career where league_name='NHL') t2
 #                     on t1.player_id=t2.player_id
 #                     where clusters=:id and t1.player_id <>:pid
@@ -158,7 +158,7 @@ def parse_clusters(p="F"):
 #     """
 #     conn = sqlite3.connect('nhl_draft.db')
 #     cluster = pd.read_sql_query('''
-#                         select clusters from forward_clusters
+#                         select clusters from f_clusters
 #                         where player_id=:id
 #                         ''', conn, params={'id': player_id})
 #
