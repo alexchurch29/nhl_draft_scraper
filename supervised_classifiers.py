@@ -20,9 +20,8 @@ from imblearn.under_sampling import NearMiss
 
 
 def main():
-    # pre_processing()
-    # train_models("F", adj=1, clusters=0, classifier=2, imb=1)
-
+    train_models(pos="F", adj=1, clusters=0, classifier=1, imb=1)
+    # test(2018, "F", 1)
     return
 
 
@@ -113,29 +112,17 @@ def pre_processing(pos, classifier, test_size=0.3, random_state=0):
     df[['WJC_18', 'WJC_20', 'classifier1', 'classifier2', 'clusters50', 'clusters100', 'clusters200']] = \
         df[['WJC_18', 'WJC_20', 'classifier1', 'classifier2', 'clusters50', 'clusters100', 'clusters200']].fillna(0)
 
-    if classifier == 1:
-        X = df[[i for i in df.columns if i not in ['classifier1', 'classifier2']]]
-        y = df[['classifier1']]
+    X = df[[i for i in df.columns if i not in ['classifier1', 'classifier2']]]
+    y = df[['classifier{}'.format(classifier)]]
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
-        X_train, X_test = feature_scaling(X_train, X_test)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=y)
+    X_train, X_test, scaler = feature_scaling(X_train, X_test)
 
-        X_train.to_sql('X_train1d', conn, if_exists='replace', index=False)
-        X_test.to_sql('X_test1d', conn, if_exists='replace', index=False)
-        y_train.to_sql('y_train1d', conn, if_exists='replace', index=False)
-        y_test.to_sql('y_test1d', conn, if_exists='replace', index=False)
-
-    else:
-        X = df[[i for i in df.columns if i not in ['classifier1', 'classifier2']]]
-        y = df[['classifier2']]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state,
-                                                            stratify=y)
-        X_train, X_test = feature_scaling(X_train, X_test)
-
-        X_train.to_sql('X_train2d', conn, if_exists='replace', index=False)
-        X_test.to_sql('X_test2d', conn, if_exists='replace', index=False)
-        y_train.to_sql('y_train2d', conn, if_exists='replace', index=False)
-        y_test.to_sql('y_test2d', conn, if_exists='replace', index=False)
+    dump(scaler, 'models/scl{}_{}.sav'.format(classifier, pos.lower()))
+    X_train.to_sql('X_train{}{}'.format(classifier, pos.lower()), conn, if_exists='replace', index=False)
+    X_test.to_sql('X_test{}{}'.format(classifier, pos.lower()), conn, if_exists='replace', index=False)
+    y_train.to_sql('y_train{}{}'.format(classifier, pos.lower()), conn, if_exists='replace', index=False)
+    y_test.to_sql('y_test{}{}'.format(classifier, pos.lower()), conn, if_exists='replace', index=False)
 
     return
 
@@ -215,7 +202,7 @@ def feature_scaling(X_train, X_test):
     X_train[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18', 'WJC_18', 'WJC_20']] = X_train_standardized_columns
     X_test[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18', 'WJC_18', 'WJC_20']] = X_test_standardized_columns
 
-    return X_train, X_test
+    return X_train, X_test, scaler
 
 
 def select_features(X_train, y_train, X_test, algorithm, threshold=0.05):
@@ -231,10 +218,11 @@ def select_features(X_train, y_train, X_test, algorithm, threshold=0.05):
     clf = algorithm
     sfm = SelectFromModel(clf, threshold=threshold)
     sfm.fit(X_train, y_train.values.ravel())
-    X_train = sfm.transform(X_train)
-    X_test = sfm.transform(X_test)
+    X_train_new = sfm.transform(X_train)
+    X_test_new = sfm.transform(X_test)
+    selected_feat = X_train.columns[(sfm.get_support())]
 
-    return X_train, X_test
+    return X_train_new, X_test_new, selected_feat
 
 
 def save_model(clf, filename):
@@ -289,9 +277,12 @@ def train_models(pos, adj=0, clusters=0, classifier=1, imb=0):
         X_test = X_test[[i for i in X_test.columns if i not in ['clusters50', 'clusters100', 'clusters200']]]
         
     X_train, X_test = one_hot_encoding(X_train, X_test, clusters)
-    X_train = X_train[[i for i in X_train.columns if i not in ['player_id']]]
-    X_test = X_test[[i for i in X_test.columns if i not in ['player_id']]]
-    X_train, X_test = select_features(X_train, y_train, X_test, GradientBoostingClassifier())
+    # X_train = X_train[[i for i in X_train.columns if i not in ['player_id']]]
+    # X_test = X_test[[i for i in X_test.columns if i not in ['player_id']]]
+    # X_train, X_test, selected_feat = select_features(X_train, y_train, X_test, GradientBoostingClassifier(), threshold=0.05)
+
+    X_train = X_train[[i for i in X_train.columns if i in ['adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18']]]
+    X_test = X_test[[i for i in X_test.columns if i in ['adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18']]]
     
     models = [GradientBoostingClassifier(), MLPClassifier(), SVC(), RandomForestClassifier(), GaussianNB(), KNeighborsClassifier()]
     # models = [VotingClassifier(estimators=[('gbc', MLPClassifier()), ('rnc', RandomForestClassifier())],voting='soft')]
@@ -309,20 +300,129 @@ def train_models(pos, adj=0, clusters=0, classifier=1, imb=0):
         print(type(model).__name__)
         print(confusion_matrix(y_test, y_pred))
         print("f1: {}".format(f1_score(y_train, y_train_pred)))
-        # print("Recall:", recall_score(y_test, y_pred))
+        print("Recall:", recall_score(y_test, y_pred))
         print("Accuracy:", accuracy_score(y_test, y_pred))
         print()
 
-        # save_model(clf, 'clf2_d.sav')
+        # clf.feature_names = selected_feat
+        # save_model(clf, 'models/clf{}_{}.sav'.format(classifier, pos.lower()))
         #
         # test = X_test_original.loc[:, [i for i in X_test_original.columns if i in ['player_id']]]
         # test['player_class'] = y_test
         # test['prediction'] = y_pred
         # test['probability'] = [i[1] for i in clf.predict_proba(X_test)]
         # test = test.sort_values(by=['prediction', 'probability'], ascending=False)
-        # test.to_sql('clf2_d', sqlite3.connect('nhl_draft.db'), if_exists='replace', index=False)
+        # test.to_sql('clf{}_{}'.format(classifier, pos.lower()), sqlite3.connect('nhl_draft.db'), if_exists='replace', index=False)
 
     return
+
+
+def test(draft_year, pos="F", classifier=1):
+    conn = sqlite3.connect('nhl_draft.db')
+
+    if pos == "F":
+        ppg = 0.33
+    else:
+        ppg = 0.25
+
+    df = pd.read_sql_query('''
+                        select t1.player_id as player_id, height, weight, age , pos, country, league_id17, league_id18, 
+                        g_gp17, a_gp17, g_gp18, a_gp18, 
+                        adj_g_a17, adj_g_a18, adj_a_a17, adj_a_a18, wjc_18, wjc_20, clusters50, 
+                        clusters100, clusters200, classifier1, classifier2
+                        from
+                        (select player_id, age, height, weight, birth_year, pos, country,
+                        max(Case when age2 = 17 then normalized_g_gp end) as adj_g_a17,
+                        max(Case when age2 = 18 then normalized_g_gp end) as adj_g_a18,
+                        max(Case when age2 = 17 then normalized_a_gp end) as adj_a_a17,
+                        max(Case when age2 = 18 then normalized_a_gp end) as adj_a_a18,
+                        max(Case when age2 = 17 then gp end) as adj_gp_a17,
+                        max(Case when age2 = 18 then gp end) as adj_gp_a18
+                        from 
+                            (select t1.player_id as player_id, age2, age, height, weight, pos, country,
+                            cast(substr(dob,0, 5) as int) as birth_year,
+                            sum(gp) as gp, sum(adj_g_gp * le * gp) / sum(gp) as normalized_g_gp, 
+                            sum(adj_a_gp * le * gp) / sum(gp) as normalized_a_gp, sum(gp) as gp
+                            from
+                            (select *, t1.g_gp * era_adj_p_gp as adj_g_gp, t1.a_gp * era_adj_p_gp as adj_a_gp, t2.le 
+                            from skater_stats_season t1
+                            inner join league_equivalencies t2
+                            on t1.league_name = t2.league_name
+                            inner join era_adjustments t3
+                            on t1.league_name = t3.league_name and t1.season = t3.season) t1
+                            inner join bios t2 
+                            on t1.player_id = t2.player_id
+                            where pos2="{}"
+                            group by t1.player_id, age2) t1
+                        group by player_id) t1
+                        left join awards t2
+                        on t1.player_id=t2.player_id
+                        left join(select player_id,
+                        max(Case when age = 17 then league_id end) as league_id17,
+                        max(Case when age = 17 then gp end) as gp17,
+                        max(Case when age = 17 then g_gp end) as g_gp17,
+                        max(Case when age = 17 then a_gp end) as a_gp17,
+                        max(Case when age = 18 then league_id end) as league_id18,
+                        max(Case when age = 18 then gp end) as gp18,
+                        max(Case when age = 18 then g_gp end) as g_gp18,
+                        max(Case when age = 18 then a_gp end) as a_gp18
+                        from(select player_id, age2 as age, max(gp) as gp, league_id, g_gp, a_gp
+                        from skater_stats_season
+                        group by player_id, age)
+                        group by player_id) t3
+                        on t1.player_id=t3.player_id 
+                        left join (
+                        select player_id, gp, p_gp, 
+                        case when gp <= 164 or p_gp < {} then 0  
+                        else 1 end as classifier2
+                        from skater_stats_career
+                        where league_name = "NHL") t4
+                        on t1.player_id=t4.player_id
+                        left join draft t5 
+                        on t1.player_id = t5.player_id
+                        left join {}_clusters t6
+                        on t1.player_id = t6.player_id
+                        left join (
+                        select player_id, gp, p_gp, 
+                        case when gp < 1 then 0  
+                        else 1 end as classifier1
+                        from skater_stats_career
+                        where league_name = "NHL") t7
+                        on t1.player_id=t7.player_id
+                        where adj_g_a17 notnull and adj_g_a18 and adj_a_a17 notnull and adj_a_a18 notnull and height notnull 
+                        and age notnull and weight notnull and pos notnull and country notnull and gp17>=20 
+                        and gp18>=20 and league_id17 notnull and league_id18 notnull and t5.year={}
+                        '''.format(pos, ppg, pos, draft_year), conn)
+
+    df[['WJC_18', 'WJC_20', 'classifier1', 'classifier2', 'clusters50', 'clusters100', 'clusters200']] = \
+        df[['WJC_18', 'WJC_20', 'classifier1', 'classifier2', 'clusters50', 'clusters100', 'clusters200']].fillna(0)
+
+    X = df[[i for i in df.columns if i not in ['classifier1', 'classifier2']]]
+    scaler = load('models/scl{}_{}.sav'.format(classifier, pos.lower()))
+    X_train_data_to_standardize = X[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18', 'WJC_18', 'WJC_20']]
+    X_train_standardized_columns = scaler.transform(X_train_data_to_standardize)
+    X[['height', 'weight', 'age', 'adj_g_a17', 'adj_g_a18', 'adj_a_a17', 'adj_a_a18', 'g_gp17', 'a_gp17', 'g_gp18', 'a_gp18', 'WJC_18', 'WJC_20']] = X_train_standardized_columns
+    X = X[[i for i in X.columns if i not in ['g_gp17', 'a_gp17', 'g_gp18', 'a_gp18', 'clusters50', 'clusters100', 'clusters200']]]
+
+    df = X
+    df = pd.concat([df, pd.get_dummies(df['league_id17'], prefix='league_id17')], axis=1)
+    df = pd.concat([df, pd.get_dummies(df['league_id18'], prefix='league_id18')], axis=1)
+    df = pd.concat([df, pd.get_dummies(df['pos'], prefix='pos')], axis=1)
+    df = pd.concat([df, pd.get_dummies(df['country'], prefix='country')], axis=1)
+    df.drop(['league_id17', 'league_id18', 'country', 'pos'], axis=1, inplace=True)
+    X.drop(['league_id17', 'league_id18', 'country', 'pos'], axis=1, inplace=True)
+    X.merge(df, on='player_id', how='left')
+    X_test = X[[i for i in X.columns if i not in ['player_id']]]
+
+    clf = load('models/clf{}_{}.sav'.format(classifier, pos.lower()))
+    X_test = X_test[[i for i in clf.feature_names]]
+    y_pred = clf.predict(X_test)
+
+    test = X.loc[:, [i for i in X.columns if i in ['player_id']]]
+    test['prediction'] = y_pred
+    test['probability'] = [i[1] for i in clf.predict_proba(X_test)]
+    test = test.sort_values(by=['prediction', 'probability'], ascending=False)
+    test.to_sql('{}{}_{}'.format(pos.lower(), classifier, draft_year), sqlite3.connect('nhl_draft.db'), if_exists='replace', index=False)
 
 
 if __name__ == '__main__':
